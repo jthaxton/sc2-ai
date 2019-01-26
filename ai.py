@@ -30,6 +30,8 @@ class JoeBot(sc2.BotAI):
                     break 
                 if not self.units(ASSIMILATOR).closer_than(1.0, vespene).exists:
                     await self.do(worker.build(ASSIMILATOR,vespene))
+    async def offensive_force_buildings():
+        
 
     async def on_step(self,iteration):
         await self.distribute_workers()
@@ -37,6 +39,8 @@ class JoeBot(sc2.BotAI):
         await self.build_pylons()
         await self.expand()
         await self.build_assimilator()
+        await self.offensive_force_buildings()
+
 
 
 # change map name 
