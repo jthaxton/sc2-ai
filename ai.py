@@ -6,18 +6,22 @@ from sc2.constants import *
 
 class JoeBot(sc2.BotAI):
     def __init__(self):
-        self.drone_counter = 14
+        self.drone_counter = 12
         self.spawning_pool = False 
         self.extractor_started = False 
         self.metabolic_boost_started = False 
+        self.gas_populated = False 
+        self.evolution_chamber_started = False 
+        self.zerg_overload_started = False 
+        self.zergling_count = 0
 
     async def build_workers(self):
-        if self.can_afford(DRONE) and self.drone_counter < 16:
+        if self.can_afford(DRONE) and self.units(LARVA).exists:
             await self.do(self.units(LARVA).random.train(DRONE))
             self.drone_counter += 1
 
     async def spawn_overlord(self):
-            if self.can_afford(OVERLORD) and self.supply_left < 2:
+            if self.can_afford(OVERLORD) and self.supply_left < 2 and self.units(LARVA).exists:
                 await self.do(self.units(LARVA).random.train(OVERLORD))
 
     async def expand(self):
@@ -34,13 +38,20 @@ class JoeBot(sc2.BotAI):
                 if not err:
                     self.drone_counter -= 1 
                     self.extractor_started = True
+    
+    async def populate_gas(self):
+        extractor = self.units(EXTRACTOR).first
+        for drone in self.workers.random_group_of(3):
+            await self.do(drone.gather(extractor))
+            self.gas_populated = True
         
     async def spawn_zergling(self):
-        if self.can_afford(ZERGLING):
+        if self.can_afford(ZERGLING) and self.spawning_pool == True and self.units(LARVA).exists and self.drone_counter > 30:
             await self.do(self.units(LARVA).random.train(ZERGLING))
+            self.zergling_count += 1 
 
     async def build_spawning_pool(self):
-        if self.can_afford(SPAWNINGPOOL):
+        if self.can_afford(SPAWNINGPOOL) and self.spawning_pool == False:
             for d in range(4,15):
                 pos = self.units(HATCHERY).ready.first.position.to2.towards(self.game_info.map_center, d)
                 if await self.can_place(SPAWNINGPOOL, pos):
@@ -50,23 +61,49 @@ class JoeBot(sc2.BotAI):
                         self.spawning_pool = True 
                         break
     async def upgrade_zerg_speed(self):
-        if self.can_afford(METABOLICBOOST) and self.metabolic_boost_started == False and self.extractor_started == True:
+        if self.can_afford(RESEARCH_ZERGLINGMETABOLICBOOST) and self.metabolic_boost_started == False and self.extractor_started == True:
             await self.do(self.units(SPAWNINGPOOL).ready.first(RESEARCH_ZERGLINGMETABOLICBOOST))
             self.metabolic_boost_started = True 
+
+    async def build_evolution_chamber(self):
+        if self.can_afford(EVOLUTIONCHAMBER) and self.evolution_chamber_started == False:
+            for d in range(4,15):
+                pos = self.units(HATCHERY).ready.first.position.to2.twoards(self.game_info.map_center,d)
+                if await self.can_place(EVOLUTIONCHAMBER, pos):
+                    drone - self.worksers.closest_to(pos)
+                    err = await self.do(drone.build(EVOLUTIONCHAMBER, pos))
+                    if not err:
+                        self.evolution_chamber_started = True 
+                        break 
+
+    async def upgrade_zergling_power(self):
+        if self.can_afford(RESEARCH_ZERGLINGADRENALOVERLOAD) and self.zerg_overload_started == False:
+            await self.do(self.units(EVOLUTIONCHAMBER).ready.first(RESEARCH_ZERGLINGADRENALOVERLOAD))
+            self.zerg_overload_started = True 
+
+    async def zergling_attack(self):
+        if self.zergling_count == 20:
+            for unit in self.units(ZERGLING):
+                await self.do(unit.attack(self.enemy_start_locations[0]))
+
+    # defense upgrade in progress
+    # async def upgrade_zergling_defense(self):
+    #     if self.can_afford(RESEARCH_ZERGLING)
+
 
     async def on_step(self,iteration):
         if iteration == 0:
             await self.chat_send("GLHF")
-        if self.drone_counter > 12 and self.spawning_pool == True and self.units(LARVA).exists:
-            await self.spawn_zergling()
+        await self.upgrade_zerg_speed()
+        await self.upgrade_zergling_power()
+        await self.spawn_zergling()
         await self.distribute_workers()
-        if self.spawning_pool == False:
-            await self.build_spawning_pool()
-        if self.units(LARVA).exists:
-            await self.build_workers()
-            await self.spawn_overlord()
+        await self.build_spawning_pool()
+        await self.build_workers()
+        await self.spawn_overlord()
         await self.expand()
         await self.build_extractor()
+        await self.zergling_attack()
 
 
 
